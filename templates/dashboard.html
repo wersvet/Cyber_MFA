@@ -9,7 +9,7 @@
 <body>
     <div class="container">
         <h1>Добро пожаловать, {{ session['user'] }}!</h1>
-        <img src="{{ url_for('static', filename='pic1.png') }}" alt="Изображение">
+        <img src="{{ url_for('static', filename='pic1.jpg') }}" alt="Изображение">
         <br>
         <a href="{{ url_for('logout') }}">Выйти</a>
     </div>

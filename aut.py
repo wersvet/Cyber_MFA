@@ -105,15 +105,19 @@ def mfa_select():
     if request.method == "POST":
         method = request.form.get("mfa_method")
         session["mfa_method"] = method
-        
-        if method == "sms":
+
+        if method == "email":
             session["mfa_code"] = str(random.randint(100000, 999999))
-            print(f"[DEBUG] Код по SMS: {session['mfa_code']}")
+            cursor.execute("SELECT email FROM users WHERE login=?", (session["user"],))
+            email = cursor.fetchone()[0]
+            send_email(email, session["mfa_code"])
             return redirect(url_for("mfa_verify"))
+
         elif method == "totp":
             return redirect(url_for("mfa_totp_setup"))
-    
+
     return render_template("mfa_select.html")
+
 
 # Настройка Google Authenticator
 @app.route("/mfa_totp_setup")
@@ -143,21 +147,33 @@ def mfa_totp_setup():
 # Подтверждение MFA
 @app.route("/mfa_verify", methods=["GET", "POST"])
 def mfa_verify():
-    if "user" not in session:
+    if "user" not in session or "mfa_method" not in session:
         return redirect(url_for("login"))
 
     if request.method == "POST":
-        code = request.form.get("code")
-        method = session.get("mfa_method")
+        code = request.form["code"]
 
-        if method == "sms" and code == session.get("mfa_code"):
-            return redirect(url_for("dashboard"))
-        elif method == "totp":
-            totp = pyotp.TOTP(session["totp_secret"])
-            if totp.verify(code):
+        if session["mfa_method"] == "email":
+            if "mfa_code" in session and code == session["mfa_code"]:
+                session.pop("mfa_code", None)
+                session.pop("mfa_method", None)
                 return redirect(url_for("dashboard"))
-    
+            else:
+                return "Ошибка: Неверный код!"
+
+        elif session["mfa_method"] == "totp":
+            cursor.execute("SELECT totp_secret FROM users WHERE login=?", (session["user"],))
+            totp_secret = cursor.fetchone()[0]
+
+            totp = pyotp.TOTP(totp_secret)
+            if totp.verify(code):
+                session.pop("mfa_method", None)
+                return redirect(url_for("dashboard"))
+            else:
+                return "Ошибка: Неверный код Google Authenticator!"
+
     return render_template("mfa_verify.html")
+
 
 # Выход из аккаунта
 @app.route("/logout")

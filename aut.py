@@ -4,6 +4,7 @@ import smtplib
 import pyotp
 import qrcode
 import requests
+import os
 import time
 from flask import Flask, render_template, request, redirect, session, url_for
 from email.mime.text import MIMEText
@@ -74,7 +75,7 @@ def send_email(email, code):
         server.quit()
         print("✅ Email отправлен успешно!")
     except Exception as e:
-        print(f"❌ Ошибка при отправке Email: {e}")  # Логируем ошибку
+        print(f"Ошибка при отправке Email: {e}")  # Логируем ошибку
 
 
 
@@ -97,7 +98,9 @@ def login():
 
         if user:
             session["user"] = login
-            session["totp_secret"] = user[5]
+            session["totp_secret"] = user[5]  # 👈 Здесь загружается TOTP Secret
+            print(f"🔑 Загружен TOTP Secret для {login}: {user[5]}")  # 👈 Логируем ключ
+
             return redirect(url_for("mfa_select"))
         else:
             return "Ошибка: Неверный логин или пароль"
@@ -134,54 +137,55 @@ def mfa_totp_setup():
     if "user" not in session:
         return redirect(url_for("login"))
 
-    # Получаем TOTP-ключ пользователя из БД
     cursor.execute("SELECT totp_secret FROM users WHERE login=?", (session["user"],))
-    totp_secret = cursor.fetchone()[0]
+    result = cursor.fetchone()
+    
+    if not result or not result[0]:
+        # Если у пользователя еще нет TOTP-ключа, создаем его
+        totp_secret = pyotp.random_base32()
+        cursor.execute("UPDATE users SET totp_secret=? WHERE login=?", (totp_secret, session["user"]))
+        conn.commit()
+    else:
+        # Если ключ уже есть, используем его
+        totp_secret = result[0]
 
-    if not totp_secret:
-        return "Ошибка: У пользователя нет TOTP-ключа!"
-
-    # Создаём Google Authenticator TOTP
+    # Генерируем QR-код для конкретного пользователя
     totp = pyotp.TOTP(totp_secret)
-    uri = totp.provisioning_uri(name=session["user"], issuer_name="FlaskApp")
+    qr_uri = totp.provisioning_uri(name=session["user"], issuer_name="FlaskApp")
 
-    # Генерируем QR-код
-    import qrcode
-    img = qrcode.make(uri)
-    img.save("static/qr.png")
+    img = qrcode.make(qr_uri)
+    img_path = os.path.join("static", "qr.png")
+    img.save(img_path)
 
-    return render_template("mfa_totp.html", qr_code="/static/qr.png")
+    return render_template("mfa_totp.html", qr_code=url_for("static", filename="qr.png"))
+
+
 
 
 # Подтверждение MFA
-@app.route("/mfa_verify", methods=["GET", "POST"])
+@app.route("/mfa_verify", methods=["POST"])
 def mfa_verify():
-    if "user" not in session or "mfa_method" not in session:
+    if "user" not in session:
         return redirect(url_for("login"))
 
-    if request.method == "POST":
-        code = request.form["code"]
+    code = request.form["code"]
 
-        if session["mfa_method"] == "email":
-            if "mfa_code" in session and code == session["mfa_code"]:
-                session.pop("mfa_code", None)
-                session.pop("mfa_method", None)
-                return redirect(url_for("dashboard"))
-            else:
-                return "Ошибка: Неверный код!"
+    # Получаем сохраненный секретный ключ пользователя
+    cursor.execute("SELECT totp_secret FROM users WHERE login=?", (session["user"],))
+    result = cursor.fetchone()
 
-        elif session["mfa_method"] == "totp":
-            cursor.execute("SELECT totp_secret FROM users WHERE login=?", (session["user"],))
-            totp_secret = cursor.fetchone()[0]
+    if not result or not result[0]:
+        return "Ошибка: У пользователя нет TOTP-ключа!"
 
-            totp = pyotp.TOTP(totp_secret)
-            if totp.verify(code):
-                session.pop("mfa_method", None)
-                return redirect(url_for("dashboard"))
-            else:
-                return "Ошибка: Неверный код Google Authenticator!"
+    totp_secret = result[0]
+    totp = pyotp.TOTP(totp_secret)
 
-    return render_template("mfa_verify.html")
+    if totp.verify(code):
+        return redirect(url_for("dashboard"))
+    else:
+        return "Ошибка: Неверный код!"
+
+
 
 
 # Выход из аккаунта

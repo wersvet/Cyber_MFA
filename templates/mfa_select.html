@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Выбор MFA</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Выберите метод аутентификации</h1>
+        <form method="POST">
+            <button type="submit" name="mfa_method" value="sms" class="btn">Код по SMS</button>
+            <button type="submit" name="mfa_method" value="totp" class="btn">Google Authenticator</button>
+        </form>
+    </div>
+</body>
+</html>

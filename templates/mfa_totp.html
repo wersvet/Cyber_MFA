@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Настройка Google Authenticator</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Настройка Google Authenticator</h1>
+        <p>Отсканируйте этот QR-код в Google Authenticator:</p>
+        <img src="{{ qr_code }}" alt="QR-код">
+        <p>После сканирования введите код из приложения:</p>
+        <form method="POST" action="{{ url_for('mfa_verify') }}">
+            <input type="text" name="code" placeholder="Введите код" required>
+            <button type="submit">Подтвердить</button>
+        </form>
+    </div>
+</body>
+</html>

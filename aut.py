@@ -4,6 +4,7 @@ import smtplib
 import pyotp
 import qrcode
 import requests
+import time
 from flask import Flask, render_template, request, redirect, session, url_for
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -43,6 +44,13 @@ def is_valid_email(email):
 def is_valid_phone(phone):
     import re
     return bool(re.fullmatch(r"(\+7|8)7\d{9}", phone))
+
+# Функция генерации псевдослучайного кода через BBS
+def bbs_random(seed, p=499, q=547):
+    """Генератор Blum-Blum-Shub (BBS)"""
+    n = p * q
+    seed = (seed ** 2) % n
+    return seed % 900000 + 100000  # 6-значный код
 
 # Функция для отправки кода на Email
 def send_email(email, code):
@@ -101,13 +109,14 @@ def login():
 def mfa_select():
     if "user" not in session:
         return redirect(url_for("login"))
-
+    
     if request.method == "POST":
         method = request.form.get("mfa_method")
         session["mfa_method"] = method
-
+        
         if method == "email":
-            session["mfa_code"] = str(random.randint(100000, 999999))
+            seed = int(time.time())
+            session["mfa_code"] = str(bbs_random(seed))
             cursor.execute("SELECT email FROM users WHERE login=?", (session["user"],))
             email = cursor.fetchone()[0]
             send_email(email, session["mfa_code"])
